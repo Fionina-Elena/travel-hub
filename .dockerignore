@@ -1,0 +1,16 @@
+node_modules/
+frontend/node_modules/
+.env
+.env.backup
+.env.production
+.phpunit.result.cache
+Homestead.json
+Homestead.yaml
+npm-debug.log
+yarn-error.log
+/.idea
+/.vscode
+/storage/*.key
+/storage/logs/*.log
+*.log
+.DS_Store

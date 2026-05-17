@@ -1,0 +1,11 @@
+{
+  "name": "tour-catalog",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"php artisan serve --port=8000\" \"cd frontend && npm run dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}
