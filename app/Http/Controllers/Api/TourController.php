@@ -3,54 +3,55 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Tour;
+use App\Services\SupabaseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 
 class TourController extends Controller
 {
+    private SupabaseService $supabase;
+
+    public function __construct(SupabaseService $supabase)
+    {
+        $this->supabase = $supabase;
+    }
+
     public function index(Request $request): JsonResponse
     {
-        $query = Tour::with(['category', 'images', 'dates']);
+        $params = ['select' => '*,category:categories(*),images:tour_images(*),dates:tour_dates(*)'];
 
         if ($request->has('category')) {
-            $query->where('category_id', $request->category);
+            $params['category_id'] = 'eq.' . $request->category;
         }
 
         if ($request->has('min_days')) {
-            $query->where('duration_days', '>=', $request->min_days);
+            $params['duration_days'] = 'gte.' . $request->min_days;
         }
 
         if ($request->has('max_days')) {
-            $query->where('duration_days', '<=', $request->max_days);
-        }
-
-        if ($request->has('min_price')) {
-            $query->whereHas('dates', function ($q) use ($request) {
-                $q->where('price', '>=', $request->min_price);
-            });
-        }
-
-        if ($request->has('max_price')) {
-            $query->whereHas('dates', function ($q) use ($request) {
-                $q->where('price', '<=', $request->max_price);
-            });
+            $params['duration_days'] = 'lte.' . $request->max_days;
         }
 
         if ($request->boolean('published_only', false)) {
-            $query->where('is_published', true);
+            $params['is_published'] = 'eq.true';
         }
 
-        $tours = $query->paginate(12);
+        $tours = $this->supabase->get('tours', $params);
 
-        return response()->json($tours);
+        foreach ($tours as &$tour) {
+            $tour = $this->decodeTourJson($tour);
+        }
+
+        return response()->json([
+            'data' => $tours,
+            'total' => count($tours),
+        ]);
     }
 
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'category_id' => 'required|exists:categories,id',
+            'category_id' => 'required|integer',
             'title' => 'required|string|max:255',
             'description' => 'required|string',
             'duration_days' => 'required|integer|min:1',
@@ -61,14 +62,36 @@ class TourController extends Controller
             'is_published' => 'boolean',
         ]);
 
+        $tourData = [
+            'category_id' => $validated['category_id'],
+            'title' => $validated['title'],
+            'description' => $validated['description'],
+            'duration_days' => $validated['duration_days'],
+            'is_published' => $validated['is_published'] ?? false,
+            'included' => $validated['included'] ?? null,
+            'excluded' => $validated['excluded'] ?? null,
+        ];
+
+        if (isset($validated['route_points']) && is_array($validated['route_points'])) {
+            $tourData['route_points'] = json_encode($validated['route_points'], JSON_UNESCAPED_UNICODE);
+        }
+
+        if (isset($validated['highlights']) && is_array($validated['highlights'])) {
+            $tourData['highlights'] = json_encode($validated['highlights'], JSON_UNESCAPED_UNICODE);
+        }
+
+        $tour = $this->supabase->create('tours', $tourData);
+
+        if (!$tour) {
+            return response()->json(['error' => 'Failed to create tour'], 500);
+        }
+
         $images = $request->input('images', []);
-
-        $tour = Tour::create($validated);
-
-        if (! empty($images)) {
+        if (!empty($images)) {
             foreach ($images as $image) {
                 if (isset($image['url'])) {
-                    $tour->images()->create([
+                    $this->supabase->create('tour_images', [
+                        'tour_id' => $tour['id'],
                         'url' => $image['url'],
                         'alt' => $image['alt'] ?? '',
                     ]);
@@ -76,22 +99,61 @@ class TourController extends Controller
             }
         }
 
-        return response()->json($tour->load(['category', 'images', 'dates']), 201);
+        $tour['images'] = $this->supabase->get('tour_images', ['tour_id' => 'eq.' . $tour['id']]);
+        $tour['dates'] = $this->supabase->get('tour_dates', ['tour_id' => 'eq.' . $tour['id']]);
+
+        return response()->json($tour, 201);
     }
 
-    public function show(Tour $tour): JsonResponse
+    public function show($id): JsonResponse
     {
-        $tour->load(['category', 'images', 'dates']);
+        $id = (int) $id;
+        $tour = $this->supabase->find('tours', $id);
+
+        if (!$tour) {
+            return response()->json(['error' => 'Tour not found'], 404);
+        }
+
+        $tour['images'] = $this->supabase->get('tour_images', ['tour_id' => 'eq.' . $id]);
+        $tour['dates'] = $this->supabase->get('tour_dates', ['tour_id' => 'eq.' . $id]);
+
+        $tour = $this->decodeTourJson($tour);
 
         return response()->json($tour);
     }
 
-    public function update(Request $request, Tour $tour): JsonResponse
+    private function decodeTourJson(array $tour): array
     {
-        Log::info('Update request images:', $request->input('images', []));
+        if (array_key_exists('route_points', $tour) && $tour['route_points'] !== null) {
+            if (is_string($tour['route_points'])) {
+                $decoded = json_decode($tour['route_points'], true);
+                $tour['route_points'] = is_array($decoded) ? $decoded : [];
+            } elseif (!is_array($tour['route_points'])) {
+                $tour['route_points'] = [];
+            }
+        } else {
+            $tour['route_points'] = [];
+        }
+        
+        if (array_key_exists('highlights', $tour) && $tour['highlights'] !== null) {
+            if (is_string($tour['highlights'])) {
+                $decoded = json_decode($tour['highlights'], true);
+                $tour['highlights'] = is_array($decoded) ? $decoded : [];
+            } elseif (!is_array($tour['highlights'])) {
+                $tour['highlights'] = [];
+            }
+        } else {
+            $tour['highlights'] = [];
+        }
+        
+        return $tour;
+    }
 
+    public function update(Request $request, $id): JsonResponse
+    {
+        $id = (int) $id;
         $validated = $request->validate([
-            'category_id' => 'sometimes|exists:categories,id',
+            'category_id' => 'sometimes|integer',
             'title' => 'sometimes|string|max:255',
             'description' => 'sometimes|string',
             'duration_days' => 'sometimes|integer|min:1',
@@ -100,16 +162,33 @@ class TourController extends Controller
             'included' => 'nullable|string',
             'excluded' => 'nullable|string',
             'is_published' => 'boolean',
-            'images' => 'nullable|array',
         ]);
 
-        $tour->update($validated);
+        $tourData = [];
+        foreach ($validated as $key => $value) {
+            if (in_array($key, ['route_points', 'highlights']) && is_array($value)) {
+                $tourData[$key] = json_encode($value, JSON_UNESCAPED_UNICODE);
+            } elseif ($key !== 'images') {
+                $tourData[$key] = $value;
+            }
+        }
+
+        $tour = $this->supabase->update('tours', $id, $tourData);
+
+        if (!$tour) {
+            return response()->json(['error' => 'Failed to update tour'], 500);
+        }
 
         if ($request->has('images')) {
-            $tour->images()->delete();
+            $existingImages = $this->supabase->get('tour_images', ['tour_id' => 'eq.' . $id]);
+            foreach ($existingImages as $img) {
+                $this->supabase->delete('tour_images', $img['id']);
+            }
+
             foreach ($request->images as $image) {
                 if (isset($image['url'])) {
-                    $tour->images()->create([
+                    $this->supabase->create('tour_images', [
+                        'tour_id' => $id,
                         'url' => $image['url'],
                         'alt' => $image['alt'] ?? '',
                     ]);
@@ -117,45 +196,64 @@ class TourController extends Controller
             }
         }
 
-        return response()->json($tour->load(['category', 'images', 'dates']));
+        $tour['images'] = $this->supabase->get('tour_images', ['tour_id' => 'eq.' . $id]);
+        $tour['dates'] = $this->supabase->get('tour_dates', ['tour_id' => 'eq.' . $id]);
+
+        return response()->json($tour);
     }
 
-    public function destroy(Tour $tour): JsonResponse
+    public function destroy($id): JsonResponse
     {
-        $tour->delete();
+        $id = (int) $id;
+        $this->supabase->delete('tours', $id);
 
         return response()->json(null, 204);
-    }
-
-    public function addImages(Request $request, Tour $tour): JsonResponse
-    {
-        $validated = $request->validate([
-            'images' => 'required|array',
-            'images.*.url' => 'required|string',
-            'images.*.alt' => 'nullable|string',
-            'images.*.sort_order' => 'nullable|integer',
-        ]);
-
-        foreach ($validated['images'] as $image) {
-            $tour->images()->create($image);
-        }
-
-        return response()->json($tour->load('images'));
     }
 
     public function search(Request $request): JsonResponse
     {
         $queryText = $request->validate(['q' => 'required|string'])['q'];
+        $searchTerm = '%' . $queryText . '%';
 
-        $searchTerm = '%'.$queryText.'%';
-        $results = Tour::with(['category', 'images', 'dates'])
-            ->where('is_published', true)
-            ->where(function ($q) use ($searchTerm) {
-                $q->whereRaw('LOWER(title) LIKE ?', [strtolower($searchTerm)])
-                    ->orWhereRaw('LOWER(description) LIKE ?', [strtolower($searchTerm)]);
-            })
-            ->get();
+        $params = [
+            'is_published' => 'eq.true',
+            'select' => '*,category:categories(*),images:tour_images(*),dates:tour_dates(*)',
+        ];
 
-        return response()->json($results);
+        $allTours = $this->supabase->get('tours', $params);
+
+        $results = array_filter($allTours, function ($tour) use ($searchTerm, $queryText) {
+            $tour = $this->decodeTourJson($tour);
+            $searchIn = [
+                strtolower($tour['title'] ?? ''),
+                strtolower($tour['description'] ?? ''),
+                strtolower($tour['included'] ?? ''),
+                strtolower($tour['excluded'] ?? ''),
+            ];
+
+            if (isset($tour['highlights']) && is_array($tour['highlights'])) {
+                foreach ($tour['highlights'] as $h) {
+                    $searchIn[] = strtolower($h);
+                }
+            }
+            if (isset($tour['route_points']) && is_array($tour['route_points'])) {
+                foreach ($tour['route_points'] as $rp) {
+                    $searchIn[] = strtolower($rp['name'] ?? '');
+                }
+            }
+            if (isset($tour['category']['name'])) {
+                $searchIn[] = strtolower($tour['category']['name']);
+            }
+
+            $queryLower = strtolower($queryText);
+            foreach ($searchIn as $text) {
+                if (str_contains($text, $queryLower)) {
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        return response()->json(array_values($results));
     }
 }

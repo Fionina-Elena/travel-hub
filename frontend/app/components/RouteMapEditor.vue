@@ -44,10 +44,10 @@ const initMap = () => {
     setTimeout(initMap, 200)
     return
   }
-  
+
   ymapsLib = (window as any).ymaps
   const center = getCenterFromPoints()
-  
+
   map = new ymapsLib.Map(mapContainerId, {
     center: center,
     zoom: 10,
@@ -56,20 +56,20 @@ const initMap = () => {
 
   map.events.add('click', handleMapClick)
   isMapReady = true
-  
+
   nextTick(() => renderPlacemarks())
 }
 
 const renderPlacemarks = () => {
   if (!map || !ymapsLib || !isMapReady) return
-  
+
   map.geoObjects.removeAll()
 
   points.value.forEach((point, index) => {
     let coords = point.coords
-    
+
     if (!coords) return
-    
+
     if (typeof coords === 'string') {
       const res = ymapsLib.geocode(coords)
       const geoObject = res.geoObjects.get(0)
@@ -77,18 +77,18 @@ const renderPlacemarks = () => {
         coords = geoObject.geometry.getCoordinates()
       }
     }
-    
+
     if (Array.isArray(coords)) {
       const placemark = new ymapsLib.Placemark(coords, {
         iconContent: String(index + 1),
         preset: index === 0 ? 'islands#greenCircleIcon' : 'islands#blueCircleIcon'
       })
-      
+
       placemark.events.add('click', (e: any) => {
         e.stopPropagation()
         removePoint(index)
       })
-      
+
       map.geoObjects.add(placemark)
     }
   })
@@ -98,7 +98,7 @@ const handleMapClick = async (e: any) => {
   if (!ymapsLib || !map) return
 
   const coords = e.get('coords')
-  
+
   const res = await ymapsLib.geocode(coords, { results: 1 })
   const geoObject = res.geoObjects.get(0)
   const name = geoObject ? geoObject.getAddressLine() : coords.join(', ')

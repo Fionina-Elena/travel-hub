@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: 'http://127.0.0.1:8000/api/v1',
 })
 
 api.interceptors.request.use((config) => {
@@ -44,8 +44,11 @@ export const images = {
   upload: (file: File) => {
     const formData = new FormData()
     formData.append('file', file)
-    return api.post('/images/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+    return axios.post('http://127.0.0.1:8000/api/v1/images/upload', formData, {
+      headers: { 
+        'Content-Type': 'multipart/form-data',
+        'X-Admin-Token': localStorage.getItem('admin_token') || ''
+      }
     })
   },
 }

@@ -12,11 +12,23 @@ Route::prefix('v1')->group(function () {
     Route::post('auth/login', [AuthController::class, 'login']);
     Route::get('auth/me', [AuthController::class, 'me']);
 
-    Route::apiResource('categories', CategoryController::class);
+    Route::get('categories', [CategoryController::class, 'index']);
+    Route::post('categories', [CategoryController::class, 'store']);
+    Route::get('categories/{id}', [CategoryController::class, 'show']);
+    Route::put('categories/{id}', [CategoryController::class, 'update']);
+    Route::delete('categories/{id}', [CategoryController::class, 'destroy']);
+
     Route::get('tours/search', [TourController::class, 'search'])->name('tours.search');
-    Route::apiResource('tours', TourController::class)->except(['index']);
     Route::get('tours', [TourController::class, 'index']);
-    Route::apiResource('tour-dates', TourDateController::class);
+    Route::post('tours', [TourController::class, 'store']);
+    Route::get('tours/{id}', [TourController::class, 'show']);
+    Route::put('tours/{id}', [TourController::class, 'update']);
+    Route::delete('tours/{id}', [TourController::class, 'destroy']);
+
+    Route::get('tour-dates', [TourDateController::class, 'index']);
+    Route::post('tour-dates', [TourDateController::class, 'store']);
+    Route::put('tour-dates/{id}', [TourDateController::class, 'update']);
+    Route::delete('tour-dates/{id}', [TourDateController::class, 'destroy']);
 
     Route::post('images/upload', [ImageController::class, 'upload']);
     Route::delete('images/delete', [ImageController::class, 'delete']);

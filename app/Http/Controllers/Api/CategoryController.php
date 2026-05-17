@@ -3,16 +3,23 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Category;
+use App\Services\SupabaseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class CategoryController extends Controller
 {
+    private SupabaseService $supabase;
+
+    public function __construct(SupabaseService $supabase)
+    {
+        $this->supabase = $supabase;
+    }
+
     public function index(): JsonResponse
     {
-        $categories = Category::all();
+        $categories = $this->supabase->get('categories', ['order' => 'id']);
 
         return response()->json($categories);
     }
@@ -24,37 +31,72 @@ class CategoryController extends Controller
             'description' => 'nullable|string',
         ]);
 
-        $validated['slug'] = Str::slug($validated['name']);
+        $slug = Str::slug($validated['name']);
 
-        $category = Category::create($validated);
+        $checkSlug = $this->supabase->get('categories', [
+            'slug' => 'eq.' . $slug,
+            'limit' => 1,
+        ]);
+
+        if (!empty($checkSlug)) {
+            $slug = $slug . '-' . time();
+        }
+
+        $category = $this->supabase->create('categories', [
+            'name' => $validated['name'],
+            'slug' => $slug,
+            'description' => $validated['description'] ?? null,
+        ]);
+
+        if (!$category) {
+            return response()->json(['error' => 'Failed to create category'], 500);
+        }
 
         return response()->json($category, 201);
     }
 
-    public function show(Category $category): JsonResponse
+    public function show($id): JsonResponse
     {
+        $id = (int) $id;
+        $category = $this->supabase->find('categories', $id);
+
+        if (!$category) {
+            return response()->json(['error' => 'Category not found'], 404);
+        }
+
         return response()->json($category);
     }
 
-    public function update(Request $request, Category $category): JsonResponse
+    public function update(Request $request, $id): JsonResponse
     {
+        $id = (int) $id;
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
         ]);
 
+        $data = [];
         if (isset($validated['name'])) {
-            $validated['slug'] = Str::slug($validated['name']);
+            $data['name'] = $validated['name'];
+            $data['slug'] = Str::slug($validated['name']);
+        }
+        if (array_key_exists('description', $validated)) {
+            $data['description'] = $validated['description'];
         }
 
-        $category->update($validated);
+        $category = $this->supabase->update('categories', $id, $data);
+
+        if (!$category) {
+            return response()->json(['error' => 'Failed to update category'], 500);
+        }
 
         return response()->json($category);
     }
 
-    public function destroy(Category $category): JsonResponse
+    public function destroy($id): JsonResponse
     {
-        $category->delete();
+        $id = (int) $id;
+        $this->supabase->delete('categories', $id);
 
         return response()->json(null, 204);
     }
