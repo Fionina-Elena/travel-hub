@@ -27,12 +27,12 @@
 ### Backend
 - Laravel 10
 - PHP 8.x
-- MySQL
+- PostgreSQL
 - REST API
 
 ### Frontend
 - Vue 3 + Composition API
-- Vite
+- Vike (SSR) + Vite
 - Tailwind CSS
 - Axios
 
@@ -48,21 +48,18 @@
 
 1. **Клонирование и установка зависимостей**
 ```bash
-cd /home/elena/Laravel/laravel_project
-
-# Backend
+git clone <url-репозитория>
+cd travel-hub
 composer install
 npm install
-
-# Frontend
 cd frontend
 npm install
 ```
 
 2. **Настройка базы данных**
 ```bash
-# Создайте базу данных MySQL
-mysql -u root -p
+# Создайте базу данных PostgreSQL
+sudo -u postgres psql
 CREATE DATABASE tour_catalog;
 
 # Выполните миграции
@@ -77,9 +74,12 @@ php artisan key:generate
 ```
 
 Отредактируйте `.env`:
-```env
+```bash
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
 DB_DATABASE=tour_catalog
-DB_USERNAME=root
+DB_USERNAME=postgres
 DB_PASSWORD=ваш_пароль
 ```
 
