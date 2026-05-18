@@ -26,7 +26,9 @@
 
       <div class="form-group">
         <label class="label">Описание тура</label>
-        <textarea v-model="form.prompt" rows="3" placeholder="Опишите какой тур вы хотите создать, например: 'Недельный тур на море с детьми, акцент на развлечениях'" class="textarea"></textarea>
+        <textarea v-model="form.prompt" rows="3"
+          placeholder="Опишите какой тур вы хотите создать, например: 'Недельный тур на море с детьми, акцент на развлечениях'"
+          class="textarea"></textarea>
       </div>
 
       <button @click="generate" :disabled="!form.prompt || !form.category_id || generating" class="btn-generate">
@@ -64,7 +66,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { categories as categoriesApi } from '../../api'
+import { categories as categoriesApi, ai as aiApi } from '../../api'
 
 const emit = defineEmits(['tour-generated'])
 
@@ -80,9 +82,11 @@ const form = ref({
 
 const checkStatus = async () => {
   try {
-    const response = await fetch('/api/v1/ai/status')
-    status.value = await response.json()
-  } catch {}
+    const response = await aiApi.checkStatus()
+    status.value = response.data
+  } catch {
+    status.value = { ollama: false, embedding_model: false, llm_model: false }
+  }
 }
 
 const fetchCategories = async () => {
@@ -96,20 +100,16 @@ const fetchCategories = async () => {
 const generate = async () => {
   generating.value = true
   generated.value = null
-  
+
   try {
-    const response = await fetch('/api/v1/ai/generate-tour', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form.value)
+    const response = await aiApi.generateTour({
+      prompt: form.value.prompt,
+      category_id: form.value.category_id!
     })
-    
-    if (response.ok) {
-      generated.value = await response.json()
-    } else {
-      const err = await response.json()
-      alert(err.error || 'Ошибка генерации')
-    }
+    generated.value = response.data
+  } catch (error: any) {
+    const message = error.response?.data?.error || error.message || 'Ошибка генерации'
+    alert(message)
   } finally {
     generating.value = false
   }
@@ -134,7 +134,7 @@ onMounted(() => {
 .card {
   background: white;
   border-radius: 1rem;
-  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   padding: 1.5rem;
 }
 
@@ -260,7 +260,9 @@ onMounted(() => {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .result {

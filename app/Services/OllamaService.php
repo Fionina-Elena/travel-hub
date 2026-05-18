@@ -15,9 +15,42 @@ class OllamaService
 
     public function __construct()
     {
-        $this->baseUrl = config('services.ollama.url', 'http://localhost:11434');
-        $this->llmModel = config('services.ollama.llm_model', 'llama3.1');
-        $this->embeddingModel = config('services.ollama.embedding_model', 'nomic-embed-text');
+        $this->baseUrl = config('services.ollama.url', env('OLLAMA_URL', 'http://ollama:11434'));
+        $this->llmModel = config('services.ollama.llm_model', env('OLLAMA_LLM_MODEL', 'llama3.1'));
+        $this->embeddingModel = config('services.ollama.embedding_model', env('OLLAMA_EMBEDDING_MODEL', 'nomic-embed-text'));
+    }
+
+    public function getBaseUrl(): string
+    {
+        return $this->baseUrl;
+    }
+
+    public function checkConnection(): array
+    {
+        $status = [
+            'ollama' => false,
+            'embedding_model' => false,
+            'llm_model' => false,
+        ];
+
+        try {
+            $response = Http::timeout(5)->get("{$this->baseUrl}/api/tags");
+
+            if ($response->successful()) {
+                $status['ollama'] = true;
+                $models = collect($response->json('models'))->pluck('name')->toArray();
+                $status['embedding_model'] = in_array('nomic-embed-text:latest', $models);
+                $status['llm_model'] = in_array('llama3.1:latest', $models)
+                    || in_array('llama3:latest', $models)
+                    || in_array('llama3.2:3b', $models)
+                    || in_array($this->llmModel, $models)
+                    || in_array($this->llmModel . ':latest', $models);
+            }
+        } catch (\Exception $e) {
+            Log::warning('Ollama connection check failed: ' . $e->getMessage());
+        }
+
+        return $status;
     }
 
     public function generateEmbedding(string $text): ?array
@@ -32,7 +65,7 @@ class OllamaService
                 return $response->json('embedding');
             }
         } catch (\Exception $e) {
-            Log::error('Embedding generation failed: '.$e->getMessage());
+            Log::error('Embedding generation failed: ' . $e->getMessage());
         }
 
         return null;
@@ -54,7 +87,7 @@ class OllamaService
                 return $response->json('message.content');
             }
         } catch (\Exception $e) {
-            Log::error('LLM chat failed: '.$e->getMessage());
+            Log::error('LLM chat failed: ' . $e->getMessage());
         }
 
         return null;
@@ -86,7 +119,7 @@ class OllamaService
         $data = json_decode($json, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
-            Log::error('Failed to parse LLM response: '.json_last_error_msg().', raw: '.$response);
+            Log::error('Failed to parse LLM response: ' . json_last_error_msg() . ', raw: ' . $response);
 
             return null;
         }

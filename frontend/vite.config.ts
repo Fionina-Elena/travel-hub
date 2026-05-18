@@ -18,7 +18,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://127.0.0.1:8000',
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        timeout: 300000,
+      },
       '/storage': 'http://127.0.0.1:8000',
       '/picture': 'http://127.0.0.1:8000'
     }

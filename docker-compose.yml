@@ -9,12 +9,16 @@ services:
       - .:/var/www/html
     depends_on:
       - postgres
+      - ollama
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_DATABASE=tour_catalog
       - DB_USERNAME=postgres
       - DB_PASSWORD=postgres
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+      - OLLAMA_LLM_MODEL=llama3.1
 
   frontend:
     build:
