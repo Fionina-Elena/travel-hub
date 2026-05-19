@@ -18,18 +18,18 @@ class TourController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $params = ['select' => '*,category:categories(*),images:tour_images(*),dates:tour_dates(*)'];
+        $params = ['select' => 'id,category_id,title,slug,description,duration_days,route_points,highlights,included,excluded,is_published,created_at,updated_at,category:categories(*),images:tour_images(*),dates:tour_dates(*)'];
 
         if ($request->has('category')) {
-            $params['category_id'] = 'eq.' . $request->category;
+            $params['category_id'] = 'eq.'.$request->category;
         }
 
         if ($request->has('min_days')) {
-            $params['duration_days'] = 'gte.' . $request->min_days;
+            $params['duration_days'] = 'gte.'.$request->min_days;
         }
 
         if ($request->has('max_days')) {
-            $params['duration_days'] = 'lte.' . $request->max_days;
+            $params['duration_days'] = 'lte.'.$request->max_days;
         }
 
         if ($request->boolean('published_only', false)) {
@@ -82,12 +82,12 @@ class TourController extends Controller
 
         $tour = $this->supabase->create('tours', $tourData);
 
-        if (!$tour) {
+        if (! $tour) {
             return response()->json(['error' => 'Failed to create tour'], 500);
         }
 
         $images = $request->input('images', []);
-        if (!empty($images)) {
+        if (! empty($images)) {
             foreach ($images as $image) {
                 if (isset($image['url'])) {
                     $this->supabase->create('tour_images', [
@@ -99,8 +99,8 @@ class TourController extends Controller
             }
         }
 
-        $tour['images'] = $this->supabase->get('tour_images', ['tour_id' => 'eq.' . $tour['id']]);
-        $tour['dates'] = $this->supabase->get('tour_dates', ['tour_id' => 'eq.' . $tour['id']]);
+        $tour['images'] = $this->supabase->get('tour_images', ['tour_id' => 'eq.'.$tour['id']]);
+        $tour['dates'] = $this->supabase->get('tour_dates', ['tour_id' => 'eq.'.$tour['id']]);
 
         return response()->json($tour, 201);
     }
@@ -110,12 +110,12 @@ class TourController extends Controller
         $id = (int) $id;
         $tour = $this->supabase->find('tours', $id);
 
-        if (!$tour) {
+        if (! $tour) {
             return response()->json(['error' => 'Tour not found'], 404);
         }
 
-        $tour['images'] = $this->supabase->get('tour_images', ['tour_id' => 'eq.' . $id]);
-        $tour['dates'] = $this->supabase->get('tour_dates', ['tour_id' => 'eq.' . $id]);
+        $tour['images'] = $this->supabase->get('tour_images', ['tour_id' => 'eq.'.$id]);
+        $tour['dates'] = $this->supabase->get('tour_dates', ['tour_id' => 'eq.'.$id]);
 
         $tour = $this->decodeTourJson($tour);
 
@@ -128,24 +128,24 @@ class TourController extends Controller
             if (is_string($tour['route_points'])) {
                 $decoded = json_decode($tour['route_points'], true);
                 $tour['route_points'] = is_array($decoded) ? $decoded : [];
-            } elseif (!is_array($tour['route_points'])) {
+            } elseif (! is_array($tour['route_points'])) {
                 $tour['route_points'] = [];
             }
         } else {
             $tour['route_points'] = [];
         }
-        
+
         if (array_key_exists('highlights', $tour) && $tour['highlights'] !== null) {
             if (is_string($tour['highlights'])) {
                 $decoded = json_decode($tour['highlights'], true);
                 $tour['highlights'] = is_array($decoded) ? $decoded : [];
-            } elseif (!is_array($tour['highlights'])) {
+            } elseif (! is_array($tour['highlights'])) {
                 $tour['highlights'] = [];
             }
         } else {
             $tour['highlights'] = [];
         }
-        
+
         return $tour;
     }
 
@@ -175,12 +175,12 @@ class TourController extends Controller
 
         $tour = $this->supabase->update('tours', $id, $tourData);
 
-        if (!$tour) {
+        if (! $tour) {
             return response()->json(['error' => 'Failed to update tour'], 500);
         }
 
         if ($request->has('images')) {
-            $existingImages = $this->supabase->get('tour_images', ['tour_id' => 'eq.' . $id]);
+            $existingImages = $this->supabase->get('tour_images', ['tour_id' => 'eq.'.$id]);
             foreach ($existingImages as $img) {
                 $this->supabase->delete('tour_images', $img['id']);
             }
@@ -196,8 +196,8 @@ class TourController extends Controller
             }
         }
 
-        $tour['images'] = $this->supabase->get('tour_images', ['tour_id' => 'eq.' . $id]);
-        $tour['dates'] = $this->supabase->get('tour_dates', ['tour_id' => 'eq.' . $id]);
+        $tour['images'] = $this->supabase->get('tour_images', ['tour_id' => 'eq.'.$id]);
+        $tour['dates'] = $this->supabase->get('tour_dates', ['tour_id' => 'eq.'.$id]);
 
         return response()->json($tour);
     }
@@ -213,16 +213,16 @@ class TourController extends Controller
     public function search(Request $request): JsonResponse
     {
         $queryText = $request->validate(['q' => 'required|string'])['q'];
-        $searchTerm = '%' . $queryText . '%';
+        $searchTerm = '%'.$queryText.'%';
 
         $params = [
             'is_published' => 'eq.true',
-            'select' => '*,category:categories(*),images:tour_images(*),dates:tour_dates(*)',
+            'select' => 'id,category_id,title,slug,description,duration_days,route_points,highlights,included,excluded,is_published,created_at,updated_at,category:categories(*),images:tour_images(*),dates:tour_dates(*)',
         ];
 
         $allTours = $this->supabase->get('tours', $params);
 
-        $results = array_filter($allTours, function ($tour) use ($searchTerm, $queryText) {
+        $results = array_filter($allTours, function ($tour) use ($queryText) {
             $tour = $this->decodeTourJson($tour);
             $searchIn = [
                 strtolower($tour['title'] ?? ''),
@@ -251,6 +251,7 @@ class TourController extends Controller
                     return true;
                 }
             }
+
             return false;
         });
 
